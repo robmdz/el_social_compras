@@ -237,6 +237,34 @@ CREATE POLICY notifications_admin_insert ON notifications FOR INSERT TO authenti
     WITH CHECK (get_user_role() = 'admin');
 
 -- ============================================================
+-- TRIGGER: Auto-create user profile on auth signup
+-- ============================================================
+
+-- Function to handle new user creation
+CREATE OR REPLACE FUNCTION handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Auto-create user profile with default role 'user'
+    -- Note: role and sede_id can be updated later by admin
+    INSERT INTO public.users (id, email, role, sede_id)
+    VALUES (
+        NEW.id,
+        NEW.email,
+        'user',
+        NULL
+    )
+    ON CONFLICT (id) DO NOTHING;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger on auth.users insert
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW
+    EXECUTE FUNCTION handle_new_user();
+
+-- ============================================================
 -- SEED DATA: 7 store locations
 -- ============================================================
 

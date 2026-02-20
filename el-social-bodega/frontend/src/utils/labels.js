@@ -1,9 +1,17 @@
 export const LABELS = {
   auth: {
     login: 'Iniciar Sesión',
+    register: 'Registrarse',
     email: 'Correo electrónico',
     password: 'Contraseña',
+    confirmPassword: 'Confirmar Contraseña',
+    role: 'Rol',
+    roleUser: 'Usuario (Líder)',
+    roleReviewer: 'Revisor',
+    roleAdmin: 'Administrador',
+    sede: 'Sede',
     submit: 'Entrar',
+    submitRegister: 'Registrarse',
     logout: 'Cerrar Sesión',
   },
   nav: {

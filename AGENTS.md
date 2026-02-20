@@ -205,8 +205,8 @@ el-social-bodega/
 │   │   ├── context/             # Auth context and global state
 │   │   └── utils/               # Helper functions
 │   └── package.json
-├── AGENTS.md                    # This file — AI agent context
-└── MEMORY.md                    # Project changelog and decisions log
+├── AGENTS.md                    # This file — AI agent context (at repo root CODE/)
+└── MEMORY.md                    # Single source of truth — changelog and decisions log (at repo root CODE/)
 ```
 
 ---
@@ -223,4 +223,51 @@ el-social-bodega/
 8. All 7 store locations share the same product catalog but each order is tied to a specific sede.
 9. Data migration from Excel/Google Sheets must be supported at launch via CSV import.
 10. PDF export of cost savings reports must be available for any completed order.
+
+---
+
+## Architecture Lessons & Agent Notes
+
+> This section is maintained by the AI agent. Updated: 2026-02-20.
+
+### Frontend Auth Initialization Pattern
+
+The `AuthContext` initialization **must not block on the FastAPI backend**. The correct pattern is:
+
+1. Wrap `supabase.auth.getSession()` in a `Promise.race()` with an 8 s timeout (`getSessionWithTimeout`). Without this, a stored expired token forces a network refresh call — if Supabase is unreachable (paused free-tier project, network issue), that call hangs indefinitely and `loading` never resolves.
+2. Attempt to fetch the enriched profile from `/api/v1/auth/me` (role, sede_id) as a best-effort operation inside the same `try` block.
+3. Use a `finally` block that **always** calls `setLoading(false)`, no matter what fails.
+4. Use a `mounted` flag (set to `false` in the effect cleanup) to prevent state updates after component unmount — required for React StrictMode compatibility.
+5. In `onAuthStateChange`, skip the `INITIAL_SESSION` event explicitly (`if (event === 'INITIAL_SESSION') return`) to avoid a duplicate backend call that races with the `initialize()` function.
+
+**Why `getSession` can hang**: In Supabase JS v2, `getSession()` is **not always synchronous**. If a session exists in localStorage but the access token is expired, the client silently attempts to refresh it via a network request. The axios `timeout` does not cover this call — it must be protected by a separate `Promise.race` timeout.
+
+**Why**: If the backend is down (common in local dev), an unguarded `await api.get('/auth/me')` with no timeout can hang indefinitely, leaving `loading = true` forever and showing a permanent "Cargando..." blank screen.
+
+### Axios Configuration
+
+All `axios` instances **must define a `timeout`** (currently 10 000 ms). Without a timeout, any request to a server that accepts the TCP connection but stalls (e.g., Render/Railway cold start, or a slow DB query) will cause the frontend to hang with no error and no user feedback.
+
+### Role Field Consistency
+
+The user object after login can come from two sources:
+- **Supabase fallback** (`session.user`): has `user_metadata.role`, not `role` directly.
+- **Backend `/auth/me` response**: should return `{ role, sede_id, email, ... }` flat.
+
+All role checks across the frontend (`Layout.jsx`, `ProtectedRoute`, etc.) must handle both cases:
+```js
+const role = user?.role || user?.role_name || user?.user_metadata?.role
+```
+
+### Error Boundary
+
+Currently there is no React error boundary wrapping `<App />`. Any unhandled runtime error in a page component will crash the whole app silently in production. Add one before the first production deployment.
+
+### Local vs Cloud Development
+
+The project is structured to run identically in both environments:
+- In local dev: `VITE_API_URL=http://localhost:8000/api/v1`
+- In cloud: `VITE_API_URL=https://<backend-service>.up.railway.app/api/v1`
+- The only change needed for cloud is updating the `.env` values in the hosting platform — no code changes required.
+- `CORS_ORIGINS` in `backend/.env` must include the frontend's production URL.
 

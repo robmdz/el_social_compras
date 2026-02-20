@@ -14,14 +14,14 @@ export default function Layout({ children }) {
   }
 
   const navItems = [
-    { to: '/', label: LABELS.nav.dashboard, icon: FiHome },
+    { to: '/dashboard', label: LABELS.nav.dashboard, icon: FiHome },
     { to: '/proveedores', label: LABELS.nav.suppliers, icon: FiTruck },
     { to: '/inventario', label: LABELS.nav.inventory, icon: FiPackage },
     { to: '/pedidos', label: LABELS.nav.orders, icon: FiShoppingCart },
     { to: '/notificaciones', label: LABELS.nav.notifications, icon: FiBell },
   ]
 
-  const isAdmin = user?.role === 'admin' || user?.role_name === 'admin'
+  const isAdmin = user?.role === 'admin' || user?.role_name === 'admin' || user?.user_metadata?.role === 'admin'
   if (isAdmin) {
     navItems.push({ to: '/importar', label: LABELS.nav.import, icon: FiUpload })
   }

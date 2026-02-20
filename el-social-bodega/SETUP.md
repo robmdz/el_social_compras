@@ -233,6 +233,7 @@ The project is designed to be deployed on **Railway** or **Render** (or any simi
 ## Troubleshooting
 
 | Problem | Solution |
+| `pyroaring` / `pyiceberg` build fails (Microsoft Visual C++ required) | `supabase` is pinned to `<2.24.0` to avoid `storage3`'s `pyiceberg` dependency, which requires C++ compilation on Windows. If you need newer Supabase features, install [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) instead. |
 |---------|----------|
 | PowerShell blocks venv activation | Run `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser` |
 | CORS errors in browser | Ensure `CORS_ORIGINS` in backend `.env` includes the exact frontend URL (no trailing slash) |
