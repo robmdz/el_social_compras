@@ -31,3 +31,50 @@ if (!supabaseUrl.startsWith('https://') || !supabaseUrl.includes('.supabase.co')
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+function getSupabaseStorageKey() {
+  const url = new URL(supabaseUrl)
+  const projectRef = url.hostname.split('.')[0]
+  return `sb-${projectRef}-auth-token`
+}
+
+/**
+ * Clears Supabase auth data from localStorage synchronously.
+ * Use when getSession times out or session is stale so the next load doesn't
+ * retry refresh with the same cached tokens (which causes repeated loading).
+ * Key format matches @supabase/supabase-js: sb-<project>-auth-token.
+ */
+export function clearSupabaseAuthStorage() {
+  try {
+    const storageKey = getSupabaseStorageKey()
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(storageKey)
+      localStorage.removeItem(`${storageKey}-user`)
+      localStorage.removeItem(`${storageKey}-code-verifier`)
+    }
+  } catch (_) {
+    // ignore
+  }
+}
+
+/**
+ * Returns true if localStorage has a session whose access_token is already expired.
+ * When true, caller should clear storage and skip getSession() to avoid a blocking refresh.
+ */
+export function hasExpiredSessionInStorage() {
+  try {
+    if (typeof localStorage === 'undefined') return false
+    const raw = localStorage.getItem(getSupabaseStorageKey())
+    if (!raw) return false
+    const data = JSON.parse(raw)
+    const token = data?.access_token
+    if (!token) return false
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    const exp = payload?.exp
+    if (typeof exp !== 'number') return false
+    // Consider expired 60s before actual exp to avoid edge cases
+    return exp < Math.floor(Date.now() / 1000) + 60
+  } catch (_) {
+    return false
+  }
+}

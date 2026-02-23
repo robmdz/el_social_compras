@@ -1,14 +1,23 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { supabase } from '../services/supabase'
+import { supabase, clearSupabaseAuthStorage, hasExpiredSessionInStorage } from '../services/supabase'
 import api from '../services/api'
 
 const AuthContext = createContext(null)
+
+/** Reason shown on login when auth init cleared stale/unreachable session (e.g. timeout). */
+const SESSION_CLEARED_MESSAGE = 'Tu sesión expiró o no hay conexión. Inicia sesión de nuevo.'
+
+/** Auth init timeout: shorter in dev so slow/unreachable Supabase doesn't block for 8s. */
+const DEFAULT_AUTH_INIT_TIMEOUT_MS = import.meta.env.DEV ? 3000 : 8000
+const AUTH_INIT_TIMEOUT_MS = Number(import.meta.env.VITE_AUTH_INIT_TIMEOUT) || DEFAULT_AUTH_INIT_TIMEOUT_MS
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
+  /** Set when we clear session due to getSession timeout; login page can show this once. */
+  const [sessionClearedReason, setSessionClearedReason] = useState(null)
 
   useEffect(() => {
     // Track mount state to avoid updating unmounted component (StrictMode double-invoke safe)
@@ -20,7 +29,7 @@ export function AuthProvider({ children }) {
      * (paused free-tier project, network issue, etc.), the call hangs indefinitely
      * and loading never resolves — causing a permanent "Cargando..." screen.
      */
-    const getSessionWithTimeout = (ms = 8000) =>
+    const getSessionWithTimeout = (ms = AUTH_INIT_TIMEOUT_MS) =>
       Promise.race([
         supabase.auth.getSession(),
         new Promise((_, reject) =>
@@ -49,22 +58,40 @@ export function AuthProvider({ children }) {
 
     /**
      * Initializes auth state on mount.
-     * Uses a finally block so loading ALWAYS resolves, even on network errors.
-     * The backend profile fetch is attempted but never blocks the loading state.
+     * If cache has an expired session, we clear it and skip getSession() so we never
+     * trigger a blocking token refresh. Otherwise uses getSessionWithTimeout.
      */
     const initialize = async () => {
       try {
+        if (hasExpiredSessionInStorage()) {
+          clearSupabaseAuthStorage()
+          if (mounted) {
+            setSession(null)
+            setUser(null)
+            setSessionClearedReason(SESSION_CLEARED_MESSAGE)
+          }
+          return
+        }
         const { data: { session: initialSession } } = await getSessionWithTimeout()
         if (!mounted) return
 
         setSession(initialSession)
-        // Profile fetch is best-effort and does not block the loading resolution
         await fetchUserProfile(initialSession)
       } catch (err) {
-        // getSession() itself can fail if Supabase is unreachable at startup
-        console.error('Auth initialization error:', err)
+        if (err.message?.includes('timed out')) {
+          console.warn('Auth init: getSession timed out — clearing stale session/cache')
+          // Clear localStorage synchronously so next load doesn't retry with same stale tokens
+          clearSupabaseAuthStorage()
+          supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+          if (mounted) setSessionClearedReason(SESSION_CLEARED_MESSAGE)
+        } else {
+          console.error('Auth initialization error:', err)
+        }
+        if (mounted) {
+          setSession(null)
+          setUser(null)
+        }
       } finally {
-        // Always unblock the UI regardless of what happened above
         if (mounted) setLoading(false)
       }
     }
@@ -117,6 +144,7 @@ export function AuthProvider({ children }) {
       // Update state immediately so redirects see the user (don't wait for onAuthStateChange)
       setSession(data.session)
       setUser(data.user)
+      setSessionClearedReason(null)
       return data
     } catch (err) {
       console.error('Sign-in failed:', err)
@@ -208,6 +236,8 @@ export function AuthProvider({ children }) {
     user,
     session,
     loading,
+    sessionClearedReason,
+    clearSessionClearedReason: () => setSessionClearedReason(null),
     signIn,
     signUp,
     signOut,

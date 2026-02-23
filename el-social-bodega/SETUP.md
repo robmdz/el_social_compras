@@ -122,6 +122,11 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 VITE_API_URL=http://localhost:8000/api/v1
 ```
 
+**Slow or unreliable network (optional):** In development, auth init uses a 3 s timeout so the app does not block for long. You can tune it or the API timeout in `.env`:
+
+- `VITE_AUTH_INIT_TIMEOUT=3000` — ms to wait for Supabase session (default: 3000 in dev, 8000 in production)
+- `VITE_API_TIMEOUT=5000` — ms before API requests time out (default: 10000)
+
 Start the dev server:
 
 ```bash

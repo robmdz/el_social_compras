@@ -8,7 +8,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const { signIn } = useAuth()
+  const { signIn, sessionClearedReason, clearSessionClearedReason } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const from = location.state?.from?.pathname || '/'
@@ -30,10 +30,29 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
       <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-8">
+        <button
+          type="button"
+          onClick={() => navigate('/')}
+          className="mb-4 inline-flex items-center text-sm font-medium text-primary hover:text-primary-dark"
+        >
+          ← Volver al inicio
+        </button>
         <h1 className="text-2xl font-bold text-primary mb-6 text-center">
           {LABELS.auth.login}
         </h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {sessionClearedReason && (
+          <div
+            role="alert"
+            className="mb-4 p-3 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-sm"
+          >
+            {sessionClearedReason}
+          </div>
+        )}
+        <form
+          onSubmit={handleSubmit}
+          onFocus={() => sessionClearedReason && clearSessionClearedReason()}
+          className="space-y-4"
+        >
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               {LABELS.auth.email}

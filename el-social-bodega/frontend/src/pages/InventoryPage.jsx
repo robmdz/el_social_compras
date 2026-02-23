@@ -140,7 +140,8 @@ function ProductFormModal({ product, onClose, onSuccess }) {
 export default function InventoryPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const isAdmin = user?.role === 'admin'
+  const role = user?.role || user?.role_name || user?.user_metadata?.role
+  const isAdmin = role === 'admin'
 
   const [products, setProducts] = useState([])
   const [alerts, setAlerts] = useState([])

@@ -1,14 +1,15 @@
 import axios from 'axios'
 import { supabase } from './supabase'
 
+// Optional: set VITE_API_TIMEOUT (ms) in .env for slow networks (e.g. 5000) so requests fail fast
+const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT) || 10000
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
-  // Prevent requests from hanging indefinitely when the backend is unreachable.
-  // 10 s is enough for local dev; cloud deployments should respond well within that.
-  timeout: 10000,
+  timeout: API_TIMEOUT_MS,
 })
 
 // Request interceptor: Add auth token to all requests

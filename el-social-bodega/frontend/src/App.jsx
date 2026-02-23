@@ -29,8 +29,9 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex flex-col items-center justify-center gap-2 bg-gray-50">
         <p className="text-gray-600">Cargando...</p>
+        <p className="text-sm text-gray-400">Si la conexión es lenta, puede tardar unos segundos.</p>
       </div>
     )
   }

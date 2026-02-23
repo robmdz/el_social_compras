@@ -90,15 +90,55 @@ def get_current_user(request: Request) -> dict:
     # Fetch user profile from users table
     # This verifies the user exists and is authorized
     admin_client = get_supabase_admin()
-    response = admin_client.table("users").select("id, email, role, sede_id").eq("id", user_id).single().execute()
+    # Avoid .single(): PostgREST raises when 0 rows are returned (PGRST116),
+    # which would otherwise bubble up as a 500 before we can handle it.
+    response = (
+        admin_client.table("users")
+        .select("id, email, role, sede_id")
+        .eq("id", user_id)
+        .limit(1)
+        .execute()
+    )
 
-    if not response.data:
+    records = response.data if isinstance(response.data, list) else [response.data]
+    records = [record for record in records if record]
+
+    if not records:
+        # Self-heal for legacy users created before the DB trigger existed.
+        token_email = payload.get("email")
+        if token_email:
+            admin_client.table("users").insert(
+                {
+                    "id": user_id,
+                    "email": token_email,
+                    "role": "user",
+                    "sede_id": None,
+                }
+            ).execute()
+
+            retry_response = (
+                admin_client.table("users")
+                .select("id, email, role, sede_id")
+                .eq("id", user_id)
+                .limit(1)
+                .execute()
+            )
+            retry_records = (
+                retry_response.data
+                if isinstance(retry_response.data, list)
+                else [retry_response.data]
+            )
+            retry_records = [record for record in retry_records if record]
+            if retry_records:
+                records = retry_records
+
+    if not records:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User profile not found. Ask an admin to provision your account.",
         )
 
-    user = response.data
+    user = records[0]
     return {
         "id": user["id"],
         "email": user["email"],

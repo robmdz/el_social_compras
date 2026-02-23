@@ -19,7 +19,8 @@ const INITIAL_FORM = {
 
 export default function SuppliersPage() {
   const { user } = useAuth()
-  const isAdmin = user?.role === 'admin' || user?.role_name === 'admin'
+  const role = user?.role || user?.role_name || user?.user_metadata?.role
+  const isAdmin = role === 'admin'
 
   const [suppliers, setSuppliers] = useState([])
   const [loading, setLoading] = useState(true)
