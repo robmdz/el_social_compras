@@ -8,6 +8,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet
 
 from app.services.order_service import get_order_with_savings
+from app.services.order_service import get_grouped_items_by_supplier
 
 
 def generate_savings_pdf(order_id: int) -> bytes:
@@ -89,5 +90,61 @@ def generate_savings_pdf(order_id: int) -> bytes:
         styles["Heading3"],
     ))
 
+    doc.build(elements)
+    return buffer.getvalue()
+
+
+def generate_purchase_list_pdf(order_id: int) -> bytes:
+    """Generate a purchase-list PDF grouped by suggested supplier."""
+    order = get_order_with_savings(order_id)
+    groups = get_grouped_items_by_supplier(order_id)
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5 * inch)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    elements.append(Paragraph("Lista de Compra por Proveedor", styles["Title"]))
+    elements.append(Spacer(1, 12))
+    elements.append(Paragraph(f"Pedido #{order_id}", styles["Heading3"]))
+    elements.append(Paragraph(f"Sede: {order.get('sede_name', 'N/A')}", styles["Normal"]))
+    elements.append(Spacer(1, 12))
+
+    grand_total = 0.0
+    for group in groups:
+        supplier_name = group.get("supplier_name") or "Sin proveedor sugerido"
+        subtotal = float(group.get("subtotal") or 0.0)
+        grand_total += subtotal
+
+        elements.append(Paragraph(f"Proveedor: {supplier_name}", styles["Heading4"]))
+        table_data = [["Producto", "Código", "Cantidad", "Precio Unit.", "Subtotal"]]
+        for item in group.get("items", []):
+            unit_price = float(item.get("suggested_price") or 0.0)
+            line_total = float(item.get("line_total") or 0.0)
+            table_data.append(
+                [
+                    item.get("product_name") or "N/A",
+                    item.get("product_code") or "N/A",
+                    str(item.get("quantity_requested") or 0),
+                    f"${unit_price:,.0f}",
+                    f"${line_total:,.0f}",
+                ]
+            )
+        table_data.append(["", "", "", "Subtotal", f"${subtotal:,.0f}"])
+
+        table = Table(table_data, colWidths=[2.3 * inch, 1 * inch, 0.9 * inch, 1.2 * inch, 1.2 * inch])
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0D47A1")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
+            ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+            ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#E3F2FD")),
+            ("ALIGN", (2, 1), (-1, -1), "CENTER"),
+        ]))
+        elements.append(table)
+        elements.append(Spacer(1, 12))
+
+    elements.append(Paragraph(f"<b>Total lista de compra: ${grand_total:,.0f}</b>", styles["Heading3"]))
     doc.build(elements)
     return buffer.getvalue()

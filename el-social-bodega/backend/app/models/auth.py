@@ -21,7 +21,15 @@ class UserResponse(BaseModel):
     role: UserRole
     sede_id: Optional[int] = None
     sede_name: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     created_at: Optional[datetime] = None
+
+
+class SedeOption(BaseModel):
+    """Public list item for sede dropdown (e.g. registration form)."""
+    id: int
+    name: str
 
 
 class TokenResponse(BaseModel):

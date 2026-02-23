@@ -137,7 +137,7 @@ def get_current_user(request: Request) -> dict:
     admin_client = get_supabase_admin()
     response = (
         admin_client.table("users")
-        .select("id, email, role, sede_id")
+        .select("id, email, role, sede_id, first_name, last_name")
         .eq("id", user_id)
         .limit(1)
         .execute()
@@ -154,6 +154,8 @@ def get_current_user(request: Request) -> dict:
             if meta_role not in ("admin", "user", "reviewer"):
                 meta_role = "user"
             meta_sede = raw_meta.get("sede_id")
+            meta_first = raw_meta.get("first_name")
+            meta_last = raw_meta.get("last_name")
 
             admin_client.table("users").insert(
                 {
@@ -161,12 +163,14 @@ def get_current_user(request: Request) -> dict:
                     "email": token_email,
                     "role": meta_role,
                     "sede_id": meta_sede,
+                    "first_name": meta_first,
+                    "last_name": meta_last,
                 }
             ).execute()
 
             retry_response = (
                 admin_client.table("users")
-                .select("id, email, role, sede_id")
+                .select("id, email, role, sede_id, first_name, last_name")
                 .eq("id", user_id)
                 .limit(1)
                 .execute()
@@ -192,6 +196,8 @@ def get_current_user(request: Request) -> dict:
         "email": user["email"],
         "role": user["role"],
         "sede_id": user.get("sede_id"),
+        "first_name": user.get("first_name"),
+        "last_name": user.get("last_name"),
     }
 
 

@@ -14,8 +14,12 @@ from app.models.inventory import (
     MovementCreate,
     MovementResponse,
     LowStockAlert,
+    SedeStockItem,
+    SedeStockUpdate,
+    TransferRequest,
 )
 import app.services.inventory_service as inventory_service
+import app.services.notification_service as notification_service
 
 router = APIRouter()
 
@@ -28,7 +32,12 @@ async def list_products(
 ):
     """List products with optional search and category filters."""
     try:
-        data = inventory_service.get_products(search=search, category=category)
+        include_pending = current_user.get("role") == "admin"
+        data = inventory_service.get_products(
+            search=search,
+            category=category,
+            include_pending=include_pending,
+        )
         return [ProductResponse(**item) for item in data]
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -50,14 +59,31 @@ async def get_product(
 @router.post("/products", response_model=ProductResponse)
 async def create_product(
     body: ProductCreate,
-    current_user: dict = Depends(require_admin),
+    current_user: dict = Depends(require_user_or_admin),
 ):
     """Create a new product."""
     try:
-        data = inventory_service.create_product(body.model_dump())
+        role = current_user.get("role")
+        payload = body.model_dump(exclude_unset=True)
+        if role == "user":
+            payload["is_pending"] = True
+            payload["created_by"] = current_user.get("id")
+        data = inventory_service.create_product(payload)
+        if role == "user":
+            notification_service.notify_product_suggestion(
+                product_id=data["id"],
+                product_name=data.get("name", "Insumo"),
+                creator_email=current_user.get("email", "usuario"),
+            )
         return ProductResponse(**data)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        detail = str(e)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=detail or "Error al crear el producto. Revisa que las migraciones estén aplicadas.",
+        )
 
 
 @router.put("/products/{product_id}", response_model=ProductResponse)
@@ -82,6 +108,19 @@ async def delete_product(
     """Delete a product."""
     try:
         inventory_service.delete_product(product_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.patch("/products/{product_id}/approve", response_model=ProductResponse)
+async def approve_product(
+    product_id: int,
+    current_user: dict = Depends(require_admin),
+):
+    """Approve a pending product."""
+    try:
+        data = inventory_service.approve_product(product_id)
+        return ProductResponse(**data)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
@@ -198,5 +237,59 @@ def get_low_stock_alerts(
     try:
         data = inventory_service.get_low_stock_alerts()
         return [LowStockAlert(**item) for item in data]
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/sede-stock", response_model=list[SedeStockItem])
+def get_sede_stock(
+    sede_id: int = Query(..., description="Sede ID"),
+    current_user: dict = Depends(require_any_role),
+):
+    """Get inventory (product quantities) for a specific sede."""
+    try:
+        data = inventory_service.get_sede_stock(sede_id)
+        return [SedeStockItem(**item) for item in data]
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.put("/sede-stock", response_model=dict)
+def upsert_sede_stock(
+    body: SedeStockUpdate,
+    sede_id: int = Query(..., description="Sede ID"),
+    current_user: dict = Depends(require_admin),
+):
+    """Set quantity for a product at a sede (admin only)."""
+    try:
+        data = inventory_service.upsert_sede_stock(sede_id, body.product_id, body.quantity)
+        return data
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/transfer", response_model=MovementResponse)
+def create_transfer(
+    body: TransferRequest,
+    current_user: dict = Depends(require_user_or_admin),
+):
+    """Transfer stock between bodega and a sede (bodega_to_sede or sede_to_bodega)."""
+    if body.quantity <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Quantity must be positive")
+    if body.direction not in ("bodega_to_sede", "sede_to_bodega"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="direction must be 'bodega_to_sede' or 'sede_to_bodega'",
+        )
+    try:
+        if body.direction == "bodega_to_sede":
+            data = inventory_service.transfer_bodega_to_sede(
+                body.product_id, body.sede_id, body.quantity, current_user["id"]
+            )
+        else:
+            data = inventory_service.transfer_sede_to_bodega(
+                body.product_id, body.sede_id, body.quantity, current_user["id"]
+            )
+        return MovementResponse(**data)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

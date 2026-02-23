@@ -14,6 +14,11 @@ class OrderStatus(str, Enum):
     rejected = "rejected"
 
 
+class OrderExecutorType(str, Enum):
+    leader_direct = "leader_direct"
+    admin_managed = "admin_managed"
+
+
 VALID_TRANSITIONS = {
     OrderStatus.draft: [OrderStatus.sent],
     OrderStatus.sent: [OrderStatus.in_review],
@@ -27,6 +32,7 @@ VALID_TRANSITIONS = {
 
 class OrderCreate(BaseModel):
     sede_id: int
+    executor_type: OrderExecutorType = OrderExecutorType.admin_managed
 
 
 class OrderItemCreate(BaseModel):
@@ -59,6 +65,7 @@ class OrderResponse(BaseModel):
     user_id: str
     user_email: Optional[str] = None
     status: OrderStatus
+    executor_type: OrderExecutorType = OrderExecutorType.admin_managed
     items: Optional[List[OrderItemResponse]] = None
     total_suggested_cost: Optional[float] = None
     total_highest_cost: Optional[float] = None

@@ -4,6 +4,8 @@ import { useAuth } from './context/AuthContext'
 import Layout from './components/Layout'
 import HomePage from './pages/HomePage'
 import LoginPage from './pages/LoginPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
 import RegisterPage from './pages/RegisterPage'
 import DashboardPage from './pages/DashboardPage'
 import SuppliersPage from './pages/SuppliersPage'
@@ -14,6 +16,7 @@ import OrderDetailPage from './pages/OrderDetailPage'
 import NewOrderPage from './pages/NewOrderPage'
 import NotificationsPage from './pages/NotificationsPage'
 import ImportPage from './pages/ImportPage'
+import InsumosPage from './pages/InsumosPage'
 import { ProtectedRoute } from './context/AuthContext'
 
 function ProtectedLayout({ children }) {
@@ -26,12 +29,14 @@ function ProtectedLayout({ children }) {
 
 export default function App() {
   const { user, loading } = useAuth()
+  const role = user?.role || user?.role_name || user?.user_metadata?.role
+  const defaultAuthenticatedPath = role === 'user' ? '/pedidos' : '/dashboard'
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-2 bg-gray-50">
+      <div className="min-h-screen flex flex-col items-center justify-center gap-2 bg-gray-50 px-4">
         <p className="text-gray-600">Cargando...</p>
-        <p className="text-sm text-gray-400">Si la conexión es lenta, puede tardar unos segundos.</p>
+        <p className="text-sm text-gray-400 text-center">Si la conexión es lenta, puede tardar unos segundos.</p>
       </div>
     )
   }
@@ -40,20 +45,28 @@ export default function App() {
     <Routes>
       <Route
         path="/"
-        element={user ? <Navigate to="/dashboard" replace /> : <HomePage />}
+        element={user ? <Navigate to={defaultAuthenticatedPath} replace /> : <HomePage />}
       />
       <Route
         path="/iniciar-sesion"
-        element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />}
+        element={user ? <Navigate to={defaultAuthenticatedPath} replace /> : <LoginPage />}
+      />
+      <Route
+        path="/recuperar-contrasena"
+        element={user ? <Navigate to={defaultAuthenticatedPath} replace /> : <ForgotPasswordPage />}
+      />
+      <Route
+        path="/restablecer-contrasena"
+        element={<ResetPasswordPage />}
       />
       <Route
         path="/registro"
-        element={user ? <Navigate to="/dashboard" replace /> : <RegisterPage />}
+        element={user ? <Navigate to={defaultAuthenticatedPath} replace /> : <RegisterPage />}
       />
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={['admin', 'reviewer']}>
             <ProtectedLayout>
               <DashboardPage />
             </ProtectedLayout>
@@ -63,7 +76,7 @@ export default function App() {
       <Route
         path="/proveedores"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={['admin']}>
             <ProtectedLayout>
               <SuppliersPage />
             </ProtectedLayout>
@@ -73,7 +86,7 @@ export default function App() {
       <Route
         path="/inventario"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={['admin']}>
             <ProtectedLayout>
               <InventoryPage />
             </ProtectedLayout>
@@ -83,7 +96,7 @@ export default function App() {
       <Route
         path="/inventario/:productId"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={['admin']}>
             <ProtectedLayout>
               <ProductDetailPage />
             </ProtectedLayout>
@@ -123,7 +136,7 @@ export default function App() {
       <Route
         path="/notificaciones"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={['admin']}>
             <ProtectedLayout>
               <NotificationsPage />
             </ProtectedLayout>
@@ -140,7 +153,17 @@ export default function App() {
           </ProtectedRoute>
         }
       />
-      <Route path="*" element={<Navigate to={user ? "/dashboard" : "/"} replace />} />
+      <Route
+        path="/insumos"
+        element={
+          <ProtectedRoute allowedRoles={['admin', 'user']}>
+            <ProtectedLayout>
+              <InsumosPage />
+            </ProtectedLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route path="*" element={<Navigate to={user ? defaultAuthenticatedPath : "/"} replace />} />
     </Routes>
   )
 }

@@ -8,9 +8,26 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.core.security import get_current_user
 from app.db.client import get_supabase_client, get_supabase_admin
-from app.models.auth import LoginRequest, TokenResponse, UserResponse
+from app.models.auth import LoginRequest, SedeOption, TokenResponse, UserResponse
 
 router = APIRouter()
+
+
+@router.get("/sedes", response_model=list[SedeOption])
+async def list_sedes():
+    """
+    Public endpoint: returns all sedes (id, name) for registration and other forms.
+    Uses admin client so it works for unauthenticated users; RLS only allows
+    authenticated SELECT on sedes.
+    """
+    admin = get_supabase_admin()
+    response = (
+        admin.table("sedes")
+        .select("id, name")
+        .order("name")
+        .execute()
+    )
+    return [SedeOption(id=row["id"], name=row["name"]) for row in (response.data or [])]
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -40,11 +57,11 @@ async def login(credentials: LoginRequest):
     access_token = auth_response.session.access_token
     user_id = auth_response.user.id
 
-    # Fetch user profile from users table
+    # Fetch user profile from users table (join sedes for sede_name)
     admin_client = get_supabase_admin()
     profile_response = (
         admin_client.table("users")
-        .select("id, email, role, sede_id, sede_name, created_at")
+        .select("id, email, role, sede_id, first_name, last_name, created_at, sedes(name)")
         .eq("id", user_id)
         .single()
         .execute()
@@ -57,12 +74,16 @@ async def login(credentials: LoginRequest):
         )
 
     profile = profile_response.data
+    sedes = profile.get("sedes")
+    sede_name = sedes.get("name") if isinstance(sedes, dict) else None
     user = UserResponse(
         id=profile["id"],
         email=profile["email"],
         role=profile["role"],
         sede_id=profile.get("sede_id"),
-        sede_name=profile.get("sede_name"),
+        sede_name=sede_name,
+        first_name=profile.get("first_name"),
+        last_name=profile.get("last_name"),
         created_at=profile.get("created_at"),
     )
 

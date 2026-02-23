@@ -86,8 +86,17 @@ export default function OrderDetailPage() {
   const [addLoading, setAddLoading] = useState(false)
   const [statusLoading, setStatusLoading] = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [purchasePdfLoading, setPurchasePdfLoading] = useState(false)
+  const [supplierGroups, setSupplierGroups] = useState([])
   const [editingItemId, setEditingItemId] = useState(null)
   const [editQuantity, setEditQuantity] = useState('')
+  const [showSuggestProduct, setShowSuggestProduct] = useState(false)
+  const [suggestLoading, setSuggestLoading] = useState(false)
+  const [suggestForm, setSuggestForm] = useState({
+    name: '',
+    category: '',
+    unit: '',
+  })
 
   const role = user?.role || user?.role_name || user?.user_metadata?.role
   const isAdmin = role === 'admin'
@@ -107,9 +116,22 @@ export default function OrderDetailPage() {
     }
   }, [orderId, navigate])
 
+  const fetchGroupedBySupplier = useCallback(async () => {
+    try {
+      const { data } = await api.get(`/orders/${orderId}/grouped-by-supplier`)
+      setSupplierGroups(data || [])
+    } catch {
+      setSupplierGroups([])
+    }
+  }, [orderId])
+
   useEffect(() => {
     fetchOrder()
   }, [fetchOrder])
+
+  useEffect(() => {
+    fetchGroupedBySupplier()
+  }, [fetchGroupedBySupplier, fetchOrder])
 
   useEffect(() => {
     if (!productSearch.trim()) {
@@ -216,6 +238,45 @@ export default function OrderDetailPage() {
     }
   }
 
+  const handleExportPurchaseListPdf = async () => {
+    setPurchasePdfLoading(true)
+    try {
+      const { data } = await api.get(`/orders/${orderId}/purchase-list/pdf`, {
+        responseType: 'blob',
+      })
+      const blob = new Blob([data], { type: 'application/pdf' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = `pedido-${orderId}-lista-compra.pdf`
+      link.click()
+      URL.revokeObjectURL(link.href)
+      toast.success('PDF de lista por proveedor descargado')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error al exportar PDF')
+    } finally {
+      setPurchasePdfLoading(false)
+    }
+  }
+
+  const handleCreateSuggestion = async () => {
+    setSuggestLoading(true)
+    try {
+      await api.post('/products', {
+        name: suggestForm.name.trim(),
+        category: suggestForm.category.trim(),
+        unit: suggestForm.unit.trim(),
+        min_stock: 0,
+      })
+      toast.success('Sugerencia enviada para aprobación')
+      setShowSuggestProduct(false)
+      setSuggestForm({ name: '', category: '', unit: '' })
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error al sugerir producto')
+    } finally {
+      setSuggestLoading(false)
+    }
+  }
+
   const currentStepIndex = order ? getStepIndex(order.status) : -1
 
   const showSendButton = isDraft && canEditItems
@@ -233,17 +294,17 @@ export default function OrderDetailPage() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       <Link
         to="/pedidos"
-        className="inline-flex items-center gap-2 mb-6 text-primary hover:text-primary-dark font-medium transition-colors"
+        className="inline-flex items-center gap-2 mb-4 sm:mb-6 py-2 text-primary hover:text-primary-dark font-medium transition-colors touch-target"
       >
         <FiArrowLeft className="w-5 h-5" />
         {LABELS.common.back}
       </Link>
 
       {/* Order header */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 mb-4 sm:mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">
@@ -256,14 +317,24 @@ export default function OrderDetailPage() {
               <StatusBadge status={order.status} />
             </div>
           </div>
-          <button
-            onClick={handleExportPdf}
-            disabled={pdfLoading}
-            className="inline-flex items-center gap-2 px-4 py-2 border border-primary text-primary rounded-lg hover:bg-primary/10 transition-colors font-medium disabled:opacity-50"
-          >
-            <FiDownload className="w-5 h-5" />
-            {pdfLoading ? LABELS.common.loading : LABELS.orders.exportPdf}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleExportPdf}
+              disabled={pdfLoading}
+              className="inline-flex items-center gap-2 px-4 py-2.5 min-h-[44px] border border-primary text-primary rounded-lg hover:bg-primary/10 transition-colors font-medium disabled:opacity-50"
+            >
+              <FiDownload className="w-5 h-5" />
+              {pdfLoading ? LABELS.common.loading : LABELS.orders.exportPdf}
+            </button>
+            <button
+              onClick={handleExportPurchaseListPdf}
+              disabled={purchasePdfLoading}
+              className="inline-flex items-center gap-2 px-4 py-2 border border-secondary text-secondary rounded-lg hover:bg-secondary/10 transition-colors font-medium disabled:opacity-50"
+            >
+              <FiDownload className="w-5 h-5" />
+              {purchasePdfLoading ? LABELS.common.loading : 'Lista por proveedor PDF'}
+            </button>
+          </div>
         </div>
 
         {/* Status timeline */}
@@ -326,8 +397,8 @@ export default function OrderDetailPage() {
           <h2 className="text-lg font-semibold text-gray-800">Productos</h2>
         </div>
         {order.items?.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
+          <div className="overflow-x-auto scroll-touch">
+            <table className="min-w-full divide-y divide-gray-200" style={{ minWidth: '600px' }}>
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{LABELS.orders.product}</th>
@@ -445,6 +516,48 @@ export default function OrderDetailPage() {
                   ))}
                 </ul>
               )}
+              {productSearch && !selectedProduct && products.length === 0 && (
+                <div className="mt-2 rounded-lg border border-dashed border-gray-300 p-3">
+                  <p className="text-sm text-gray-600 mb-2">¿No encuentras el producto?</p>
+                  <button
+                    type="button"
+                    onClick={() => setShowSuggestProduct((v) => !v)}
+                    className="text-primary text-sm font-medium"
+                  >
+                    Sugerir nuevo producto
+                  </button>
+                </div>
+              )}
+              {showSuggestProduct && (
+                <div className="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+                  <input
+                    value={suggestForm.name}
+                    onChange={(e) => setSuggestForm((prev) => ({ ...prev, name: e.target.value }))}
+                    placeholder="Nombre del producto"
+                    className="w-full rounded border border-gray-300 px-3 py-2"
+                  />
+                  <input
+                    value={suggestForm.category}
+                    onChange={(e) => setSuggestForm((prev) => ({ ...prev, category: e.target.value }))}
+                    placeholder="Categoría"
+                    className="w-full rounded border border-gray-300 px-3 py-2"
+                  />
+                  <input
+                    value={suggestForm.unit}
+                    onChange={(e) => setSuggestForm((prev) => ({ ...prev, unit: e.target.value }))}
+                    placeholder="Unidad"
+                    className="w-full rounded border border-gray-300 px-3 py-2"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCreateSuggestion}
+                    disabled={suggestLoading || !suggestForm.name || !suggestForm.category || !suggestForm.unit}
+                    className="px-3 py-2 bg-primary text-white rounded-lg disabled:opacity-50"
+                  >
+                    {suggestLoading ? LABELS.common.loading : 'Enviar sugerencia'}
+                  </button>
+                </div>
+              )}
             </div>
             <div className="w-full sm:w-32">
               <input
@@ -467,6 +580,31 @@ export default function OrderDetailPage() {
           </form>
         </div>
       )}
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">Vista por proveedor</h3>
+        {supplierGroups.length > 0 ? (
+          <div className="space-y-4">
+            {supplierGroups.map((group) => (
+              <div key={group.supplier_id || group.supplier_name} className="rounded-lg border border-gray-200 p-4">
+                <h4 className="font-semibold text-primary">{group.supplier_name}</h4>
+                <ul className="mt-2 space-y-1 text-sm text-gray-700">
+                  {group.items.map((item) => (
+                    <li key={item.id}>
+                      {item.product_name} ({item.product_code || 'Sin código'}) x {item.quantity_requested}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-sm font-semibold text-gray-800">
+                  Subtotal: {formatCurrency(group.subtotal)}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">No hay datos agrupados por proveedor.</p>
+        )}
+      </div>
 
       {/* Admin action buttons */}
       <div className="flex flex-wrap gap-3">

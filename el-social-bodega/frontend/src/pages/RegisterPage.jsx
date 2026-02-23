@@ -3,13 +3,15 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { LABELS } from '../utils/labels'
 import toast from 'react-hot-toast'
-import { supabase } from '../services/supabase'
+import api from '../services/api'
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
     confirmPassword: '',
+    firstName: '',
+    lastName: '',
     role: 'user',
     sedeId: '',
   })
@@ -22,18 +24,8 @@ export default function RegisterPage() {
   useEffect(() => {
     const fetchSedes = async () => {
       try {
-        // Try to fetch sedes from Supabase directly
-        const { data, error } = await supabase
-          .from('sedes')
-          .select('id, name')
-          .order('name')
-        
-        if (error) {
-          console.error('Error fetching sedes:', error)
-          toast.error('No se pudieron cargar las sedes')
-        } else {
-          setSedes(data || [])
-        }
+        const { data } = await api.get('auth/sedes')
+        setSedes(Array.isArray(data) ? data : [])
       } catch (err) {
         console.error('Error fetching sedes:', err)
         toast.error('No se pudieron cargar las sedes')
@@ -62,13 +54,20 @@ export default function RegisterPage() {
       return
     }
 
+    if (!formData.sedeId) {
+      toast.error('Debes seleccionar una sede')
+      return
+    }
+
     setSubmitting(true)
     try {
       const result = await signUp(
         formData.email,
         formData.password,
         formData.role,
-        formData.sedeId ? parseInt(formData.sedeId) : null
+        parseInt(formData.sedeId, 10),
+        formData.firstName.trim(),
+        formData.lastName.trim()
       )
       
       // Check if email confirmation is required
@@ -106,9 +105,9 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
-      <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-8">
-        <h1 className="text-2xl font-bold text-primary mb-6 text-center">
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4 py-6">
+      <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-6 sm:p-8">
+        <h1 className="text-xl sm:text-2xl font-bold text-primary mb-6 text-center">
           {LABELS.auth.register}
         </h1>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -124,6 +123,35 @@ export default function RegisterPage() {
               required
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary"
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {LABELS.auth.firstName}
+              </label>
+              <input
+                type="text"
+                name="firstName"
+                value={formData.firstName}
+                onChange={handleChange}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {LABELS.auth.lastName}
+              </label>
+              <input
+                type="text"
+                name="lastName"
+                value={formData.lastName}
+                onChange={handleChange}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary"
+              />
+            </div>
           </div>
 
           <div>
@@ -175,7 +203,7 @@ export default function RegisterPage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              {LABELS.auth.sede}
+              {LABELS.auth.sede} <span className="text-red-500">*</span>
             </label>
             {loadingSedes ? (
               <p className="text-sm text-gray-500 py-2">{LABELS.common.loading}</p>
@@ -184,9 +212,10 @@ export default function RegisterPage() {
                 name="sedeId"
                 value={formData.sedeId}
                 onChange={handleChange}
+                required
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary"
               >
-                <option value="">Seleccionar sede (opcional)</option>
+                <option value="">{LABELS.auth.sedeRequired}</option>
                 {sedes.map((sede) => (
                   <option key={sede.id} value={sede.id}>
                     {sede.name}

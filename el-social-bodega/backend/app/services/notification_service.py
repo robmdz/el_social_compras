@@ -31,10 +31,17 @@ def mark_as_read(notification_id: int) -> dict[str, Any]:
     return response.data[0]
 
 
-def create_notification(user_id: str, type: str, message: str) -> dict[str, Any]:
-    """Insert into notifications."""
+def create_notification(
+    user_id: str,
+    type: str,
+    message: str,
+    product_id: int | None = None,
+) -> dict[str, Any]:
+    """Insert into notifications. product_id is used for type new_product_request (approve action)."""
     client = get_supabase_admin()
     data = {"user_id": user_id, "type": type, "message": message}
+    if product_id is not None:
+        data["product_id"] = product_id
     response = client.table("notifications").insert(data).execute()
     if not response.data or len(response.data) == 0:
         raise ValueError("Failed to create notification")
@@ -93,3 +100,18 @@ def notify_price_spike(
     admin_ids = _get_admin_user_ids()
     for uid in admin_ids:
         create_notification(uid, "price_spike", message)
+
+
+def notify_product_suggestion(
+    product_id: int,
+    product_name: str,
+    creator_email: str,
+) -> None:
+    """Notify admins when a leader suggests a new product. Include product_id for approve action."""
+    message = (
+        f"Nuevo insumo sugerido: {product_name}. "
+        f"Creado por: {creator_email}. Pendiente de aprobación."
+    )
+    admin_ids = _get_admin_user_ids()
+    for uid in admin_ids:
+        create_notification(uid, "new_product_request", message, product_id=product_id)

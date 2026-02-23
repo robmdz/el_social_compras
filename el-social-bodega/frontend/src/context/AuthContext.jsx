@@ -169,17 +169,18 @@ export function AuthProvider({ children }) {
     }
   }
 
-  const signUp = async (email, password, role, sedeId) => {
+  const signUp = async (email, password, role, sedeId, firstName, lastName) => {
     try {
-      // Sign up with Supabase Auth
+      // Sign up with Supabase Auth; metadata is used by handle_new_user trigger
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          // Include additional metadata if needed
           data: {
             role: role || 'user',
-            sede_id: sedeId || null,
+            sede_id: sedeId ?? null,
+            first_name: firstName?.trim() || null,
+            last_name: lastName?.trim() || null,
           }
         }
       })
@@ -235,6 +236,12 @@ export function AuthProvider({ children }) {
     }
   }
 
+  const requestPasswordReset = async (email) => {
+    const redirectTo = `${window.location.origin}/restablecer-contrasena`
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo })
+    if (error) throw error
+  }
+
   const signOut = async () => {
     const signOutTimeoutMs = 5000
 
@@ -266,6 +273,7 @@ export function AuthProvider({ children }) {
     signIn,
     signUp,
     signOut,
+    requestPasswordReset,
   }
 
   return (

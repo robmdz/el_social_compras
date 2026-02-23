@@ -7,10 +7,19 @@ from app.models.orders import OrderStatus, VALID_TRANSITIONS
 from app.services.suggestion_service import get_best_supplier_for_product
 
 
-def create_order(user_id: str, sede_id: int) -> dict[str, Any]:
+def create_order(
+    user_id: str,
+    sede_id: int,
+    executor_type: str = "admin_managed",
+) -> dict[str, Any]:
     """Insert into orders with status 'draft'."""
     client = get_supabase_admin()
-    data = {"user_id": user_id, "sede_id": sede_id, "status": "draft"}
+    data = {
+        "user_id": user_id,
+        "sede_id": sede_id,
+        "status": "draft",
+        "executor_type": executor_type,
+    }
     response = client.table("orders").insert(data).execute()
 
     if not response.data or len(response.data) == 0:
@@ -22,6 +31,7 @@ def create_order(user_id: str, sede_id: int) -> dict[str, Any]:
 def get_orders(
     sede_id: Optional[int] = None,
     status: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> List[dict[str, Any]]:
     """Select from orders with optional filters, join sedes for sede_name."""
     client = get_supabase_admin()
@@ -31,6 +41,8 @@ def get_orders(
         query = query.eq("sede_id", sede_id)
     if status:
         query = query.eq("status", status)
+    if user_id:
+        query = query.eq("user_id", user_id)
 
     response = query.order("created_at", desc=True).execute()
     rows = response.data or []
@@ -233,3 +245,85 @@ def get_order_with_savings(order_id: int) -> dict[str, Any]:
     order["total_highest_cost"] = total_highest
     order["total_savings"] = total_highest - total_suggested
     return order
+
+
+def get_orders_comparison_by_sede(
+    status: Optional[str] = None,
+) -> List[dict[str, Any]]:
+    """Return aggregated order metrics grouped by sede, including estimated savings."""
+    client = get_supabase_admin()
+    query = client.table("orders").select("id, sede_id, status, sedes(name)")
+    if status:
+        query = query.eq("status", status)
+    orders = query.execute().data or []
+    if not orders:
+        return []
+
+    grouped: dict[int, dict[str, Any]] = {}
+    for order in orders:
+        raw_sede = order.get("sedes")
+        if isinstance(raw_sede, dict):
+            sede_name = raw_sede.get("name")
+        elif isinstance(raw_sede, list) and raw_sede:
+            sede_name = raw_sede[0].get("name")
+        else:
+            sede_name = f"Sede {order['sede_id']}"
+
+        if order["sede_id"] not in grouped:
+            grouped[order["sede_id"]] = {
+                "sede_id": order["sede_id"],
+                "sede_name": sede_name,
+                "orders_count": 0,
+                "by_status": {},
+                "total_suggested_cost": 0.0,
+                "total_highest_cost": 0.0,
+                "total_savings": 0.0,
+            }
+
+        group = grouped[order["sede_id"]]
+        group["orders_count"] += 1
+        current_status = order.get("status") or "unknown"
+        group["by_status"][current_status] = group["by_status"].get(current_status, 0) + 1
+
+        # Include requested savings metric based on suggested vs highest prices.
+        with_savings = get_order_with_savings(order["id"])
+        group["total_suggested_cost"] += with_savings.get("total_suggested_cost") or 0.0
+        group["total_highest_cost"] += with_savings.get("total_highest_cost") or 0.0
+        group["total_savings"] += with_savings.get("total_savings") or 0.0
+
+    return sorted(grouped.values(), key=lambda item: item["sede_name"])
+
+
+def get_grouped_items_by_supplier(order_id: int) -> List[dict[str, Any]]:
+    """Group order items by suggested supplier for operational purchase view."""
+    order = get_order_with_savings(order_id)
+    grouped: dict[str, dict[str, Any]] = {}
+
+    for item in order.get("items", []):
+        supplier_id = item.get("suggested_supplier_id")
+        key = str(supplier_id) if supplier_id is not None else "unassigned"
+        supplier_name = item.get("suggested_supplier_name") or "Sin proveedor sugerido"
+        if key not in grouped:
+            grouped[key] = {
+                "supplier_id": supplier_id,
+                "supplier_name": supplier_name,
+                "items": [],
+                "subtotal": 0.0,
+            }
+        quantity = item.get("quantity_requested") or 0
+        price = item.get("suggested_price") or 0
+        line_total = quantity * price
+        grouped[key]["items"].append(
+            {
+                "id": item.get("id"),
+                "product_id": item.get("product_id"),
+                "product_name": item.get("product_name"),
+                "product_code": item.get("product_code"),
+                "quantity_requested": quantity,
+                "suggested_price": price,
+                "line_total": line_total,
+            }
+        )
+        grouped[key]["subtotal"] += line_total
+
+    return list(grouped.values())

@@ -28,12 +28,12 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
-      <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-8">
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4 py-6">
+      <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-6 sm:p-8">
         <button
           type="button"
           onClick={() => navigate('/')}
-          className="mb-4 inline-flex items-center text-sm font-medium text-primary hover:text-primary-dark"
+          className="mb-4 inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm font-semibold text-primary transition-colors hover:bg-primary/10 hover:text-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         >
           ← Volver al inicio
         </button>
@@ -80,10 +80,19 @@ export default function LoginPage() {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary"
             />
           </div>
+          <div>
+            <button
+              type="button"
+              onClick={() => navigate('/recuperar-contrasena')}
+              className="text-sm font-medium text-primary hover:text-primary-dark hover:underline"
+            >
+              {LABELS.auth.forgotPassword}
+            </button>
+          </div>
           <button
             type="submit"
             disabled={submitting}
-            className="w-full py-2 px-4 bg-primary text-white rounded-md hover:bg-primary-dark disabled:opacity-50"
+            className="w-full min-h-[44px] py-3 px-4 bg-primary text-white rounded-lg hover:bg-primary-dark disabled:opacity-50 font-medium"
           >
             {submitting ? LABELS.common.loading : LABELS.auth.submit}
           </button>
